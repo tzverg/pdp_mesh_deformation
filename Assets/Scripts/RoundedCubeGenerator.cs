@@ -1,13 +1,14 @@
 using UnityEngine;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-public class CustomCubeGenerator : MonoBehaviour
+public class RoundedCubeGenerator : MonoBehaviour
 {
     [SerializeField] private int sizeX, sizeY, sizeZ;
-    [SerializeField] private Material generatedMaterial;
+    [SerializeField] private int roundness;
 
     private Mesh mesh;
     private Vector3[] vertices;
+    private Vector3[] normals;
 
     private void Awake() 
     {
@@ -16,7 +17,6 @@ public class CustomCubeGenerator : MonoBehaviour
 
     private void Generate()
     {
-        GetComponent<MeshRenderer>().sharedMaterial = generatedMaterial;
         GetComponent<MeshFilter>().mesh = mesh = new Mesh();
         mesh.name = "Procedural Sphere";
 
@@ -34,64 +34,84 @@ public class CustomCubeGenerator : MonoBehaviour
             (sizeY - 1) * (sizeZ - 1)) * 2;
 
         vertices = new Vector3[cornerVertices + edgeVertices + faceVertices];
+        normals = new Vector3[vertices.Length];
 
         int v = 0;
         for (int y = 0; y <= sizeY; y++)
         {
             for (int x = 0; x <= sizeX; x++)
             {
-                vertices[v++] = new Vector3(x, y, 0);
+                SetVertex(v++, x, y, 0);
             }
             for (int z = 1; z <= sizeZ; z++)
             {
-                vertices[v++] = new Vector3(sizeX, y, z);
+                SetVertex(v++, sizeX, y, z);
             }
             for (int x = sizeX - 1; x >= 0; x--)
             {
-                vertices[v++] = new Vector3(x, y, sizeZ);
+                SetVertex(v++, x, y, sizeZ);
             }
             for (int z = sizeZ - 1; z > 0; z--)
             {
-                vertices[v++] = new Vector3(0, y, z);
+                SetVertex(v++, 0, y, z);
             }
         }
         for (int z = 1; z < sizeZ; z++)
         {
             for (int x = 1; x < sizeX; x++)
             {
-                vertices[v++] = new Vector3(x, sizeY, z);
+                SetVertex(v++, x, sizeY, z);
             }
         }
         for (int z = 1; z < sizeZ; z++)
         {
             for (int x = 1; x < sizeX; x++)
             {
-                vertices[v++] = new Vector3(x, 0, z);
+                SetVertex(v++, x, 0, z);
             }
         }
 
         mesh.vertices = vertices;
+        mesh.normals = normals;
     }
 
     private void CreateTriangles()
     {
-        int quads = (sizeX * sizeY + sizeX * sizeZ + sizeY * sizeZ) * 2;
-        int[] triangles = new int[quads * 6];
+        int[] trianglesX = new int[(sizeY * sizeZ) * 12];
+        int[] trianglesY = new int[(sizeX * sizeZ) * 12];
+        int[] trianglesZ = new int[(sizeX * sizeY) * 12];
+
         int ring = (sizeX + sizeZ) * 2;
-        int t = 0, v = 0;
+        int tZ = 0, tX = 0, tY = 0, v = 0;
 
         for (int y = 0; y < sizeY; y++, v++)
         {
-            for (int q = 0; q < ring - 1; q++, v++)
+            for (int q = 0; q < sizeX; q++, v++)
             {
-                t = SetQuad(triangles, t, v, v + 1, v + ring, v + ring + 1);
+                tZ = SetQuad(trianglesZ, tZ, v, v + 1, v + ring, v + ring + 1);
             }
-            t = SetQuad(triangles, t, v, v - ring + 1, v + ring, v + 1);
+            for (int q = 0; q < sizeZ; q++, v++)
+            {
+                tX = SetQuad(trianglesX, tX, v, v + 1, v + ring, v + ring + 1);
+            }
+            for (int q = 0; q < sizeX; q++, v++)
+            {
+                tZ = SetQuad(trianglesZ, tZ, v, v + 1, v + ring, v + ring + 1);
+            }
+            for (int q = 0; q < sizeZ - 1; q++, v++)
+            {
+                tX = SetQuad(trianglesX, tX, v, v + 1, v + ring, v + ring + 1);
+            }
+            tX = SetQuad(trianglesX, tX, v, v - ring + 1, v + ring, v + 1);
         }
 
-        t = CreateTopFace(triangles, t, ring);
-        t = CreateBottomFace(triangles, t, ring);
-        mesh.triangles = triangles;
+        tY = CreateTopFace(trianglesY, tY, ring);
+        tY = CreateBottomFace(trianglesY, tY, ring);
+
+        mesh.subMeshCount = 3;
+        mesh.SetTriangles(trianglesX, 0);
+        mesh.SetTriangles(trianglesY, 1);
+        mesh.SetTriangles(trianglesZ, 2);
     }
 
     private int CreateTopFace(int[] triangles, int t, int ring)
@@ -177,16 +197,50 @@ public class CustomCubeGenerator : MonoBehaviour
         return i + 6;
     }
 
+    private void SetVertex(int i, int x, int y, int z)
+    {
+        Vector3 inner = vertices[i] = new Vector3(x, y, z);
+
+        if (x < roundness)
+        {
+            inner.x = roundness;
+        }
+        else if (x > sizeX - roundness)
+        {
+            inner.x = sizeX - roundness;
+        }
+        if (y < roundness)
+        {
+            inner.y = roundness;
+        }
+        else if (y > sizeY - roundness)
+        {
+            inner.y = sizeY - roundness;
+        }
+        if (z < roundness)
+        {
+            inner.z = roundness;
+        }
+        else if (z > sizeZ - roundness)
+        {
+            inner.z = sizeZ - roundness;
+        }
+
+        normals[i] = (vertices[i] - inner).normalized;
+        vertices[i] = inner + normals[i] * roundness;
+    }
+
     private void OnDrawGizmos() 
     {
         if(vertices == null)
             return;
 
-        Gizmos.color = Color.black;
-
         for (int cnt = 0; cnt < vertices.Length; cnt++)
         {
+            Gizmos.color = Color.black;
             Gizmos.DrawSphere(vertices[cnt], 0.1F);
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawRay(vertices[cnt], normals[cnt]);
         }
     }
 }
