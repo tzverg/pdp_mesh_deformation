@@ -9,30 +9,34 @@ public class MeshDeformerInput : MonoBehaviour
     private Vector3 inputForcePoint;
     private MeshDeformationController inputDeformer;
 
-    #if UNITY_EDITOR
-        void HandleInput()
+    void HandleInput(Vector3 inputPoint)
+    {
+        inputRay = Camera.main.ScreenPointToRay(inputPoint);
+
+        if (Physics.Raycast(inputRay, out inputHit)) 
         {
-            inputRay = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(inputRay, out inputHit)) 
+            inputDeformer = inputHit.collider.GetComponent<MeshDeformationController>();
+            
+            if (inputDeformer) 
             {
-                inputDeformer = inputHit.collider.GetComponent<MeshDeformationController>();
-                
-                if (inputDeformer) 
-                {
-                    inputForcePoint = inputHit.point;
-                    inputForcePoint += inputHit.normal * inputForceOffset;
-                    inputDeformer.AddDeformingForce(inputForcePoint, inputForce);
-                }
+                inputForcePoint = inputHit.point;
+                inputForcePoint += inputHit.normal * inputForceOffset;
+                inputDeformer.AddDeformingForce(inputForcePoint, inputForce);
             }
         }
-    #endif
+    }
 
     void Update()
     {
         #if UNITY_EDITOR
             if (Input.GetMouseButton(0))
             {
-                HandleInput();
+                HandleInput(Input.mousePosition);
+            }
+        #elif UNITY_ANDROID || UNITY_IOS
+            if (Input.touchCount > 0)
+            {
+                HandleInput(Input.GetTouch(0).position);
             }
         #endif
     }
